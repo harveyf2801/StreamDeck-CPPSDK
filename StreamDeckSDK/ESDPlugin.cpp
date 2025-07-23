@@ -24,6 +24,10 @@ ESDPlugin::ESDPlugin() : ESDBasePlugin() {
 ESDPlugin::~ESDPlugin() {
 }
 
+ESDConnectionManager* ESDPlugin::GetESD() const {
+  return mConnectionManager;
+}
+
 void ESDPlugin::KeyDownForAction(
   const std::string& inAction,
   const std::string& inContext,

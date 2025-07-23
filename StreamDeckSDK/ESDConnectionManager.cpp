@@ -17,6 +17,18 @@ LICENSE file.
 #include "EPLJSONUtils.h"
 #include "ESDLogger.h"
 
+std::string GetConnectionReason(WebsocketClient* client, websocketpp::connection_hdl handler, bool useRemoteReason = false) {
+  if (client) {
+    auto connection = client->get_con_from_hdl(handler);
+    if (connection) {
+      return useRemoteReason ? connection->get_remote_close_reason()
+                             : connection->get_ec().message();
+    }
+  }
+  return {};
+}
+
+
 void ESDConnectionManager::OnOpen(
   WebsocketClient* inClient,
   websocketpp::connection_hdl inConnectionHandler) {
@@ -32,20 +44,8 @@ void ESDConnectionManager::OnOpen(
     mConnectionHandle, jsonObject.dump(), websocketpp::frame::opcode::text, ec);
 }
 
-void ESDConnectionManager::OnFail(
-  WebsocketClient* inClient,
-  websocketpp::connection_hdl inConnectionHandler) {
-  std::string reason;
-
-  if (inClient != nullptr) {
-    WebsocketClient::connection_ptr connection
-      = inClient->get_con_from_hdl(inConnectionHandler);
-    if (connection != NULL) {
-      reason = connection->get_ec().message();
-    }
-  }
-
-  ESDDebug("Failed with reason: {}", reason);
+void ESDConnectionManager::OnFail(WebsocketClient* client, websocketpp::connection_hdl handler) {
+  ESDDebug("Failed with reason: {}", GetConnectionReason(client, handler));
 
   if (mAsioContext) {
     ESDDebug("Stopping ASIO context");
@@ -53,20 +53,8 @@ void ESDConnectionManager::OnFail(
   }
 }
 
-void ESDConnectionManager::OnClose(
-  WebsocketClient* inClient,
-  websocketpp::connection_hdl inConnectionHandler) {
-  std::string reason;
-
-  if (inClient != nullptr) {
-    WebsocketClient::connection_ptr connection
-      = inClient->get_con_from_hdl(inConnectionHandler);
-    if (connection != NULL) {
-      reason = connection->get_remote_close_reason();
-    }
-  }
-
-  ESDDebug("Close with reason: {}", reason);
+void ESDConnectionManager::OnClose(WebsocketClient* client, websocketpp::connection_hdl handler) {
+  ESDDebug("Close with reason: {}", GetConnectionReason(client, handler, true));
 
   if (mAsioContext) {
     ESDDebug("Stopping ASIO context");
@@ -201,6 +189,35 @@ void ESDConnectionManager::Run() {
   }
 }
 
+bool ESDConnectionManager::Stop() {
+  websocketpp::lib::error_code ec;
+  try {
+    mWebsocket.stop_perpetual();
+
+    if (auto connHandle = mConnectionHandle.lock()) {
+      auto con = mWebsocket.get_con_from_hdl(connHandle, ec);
+      if (!ec && con) {
+        // ESDDebug("Closing WebSocket connection...");
+        mWebsocket.close(connHandle, websocketpp::close::status::going_away, "Stopping connection", ec);
+        if (ec) {
+          // std::cout << "Error closing connection: {}" << ec.message();
+        }
+      }
+    }
+
+    // Stop the ASIO context if running
+    if (mAsioContext) {
+      mAsioContext->stop();
+      mAsioContext.reset();
+    }
+
+    // std::cout << "ESDConnectionManager stopped successfully.";
+  } catch (const std::exception& e) {
+    // std::cout << "Exception during Stop: {}", e.what();
+  }
+  return bool(ec);
+}
+
 void ESDConnectionManager::SetTitle(
   const std::string& inTitle,
   const std::string& inContext,
@@ -295,6 +312,18 @@ void ESDConnectionManager::SetSettings(
   jsonObject[kESDSDKCommonEvent] = kESDSDKEventSetSettings;
   jsonObject[kESDSDKCommonContext] = inContext;
   jsonObject[kESDSDKCommonPayload] = inSettings;
+
+  websocketpp::lib::error_code ec;
+  mWebsocket.send(
+    mConnectionHandle, jsonObject.dump(), websocketpp::frame::opcode::text, ec);
+}
+
+void ESDConnectionManager::GetSettings(
+  const std::string& inContext) {
+  json jsonObject;
+
+  jsonObject[kESDSDKCommonEvent] = kESDSDKEventGetSettings;
+  jsonObject[kESDSDKCommonContext] = inContext;
 
   websocketpp::lib::error_code ec;
   mWebsocket.send(

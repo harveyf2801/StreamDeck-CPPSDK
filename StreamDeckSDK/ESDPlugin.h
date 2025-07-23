@@ -10,6 +10,7 @@
 #include <memory>
 
 class ESDAction;
+class ESDConnectionManager;
 
 /** Coordinator class for `ESDAction`-based plugins.
  *
@@ -26,6 +27,8 @@ class ESDPlugin : public ESDBasePlugin {
    */
   virtual std::shared_ptr<ESDAction>
   GetOrCreateAction(const std::string& action, const std::string& context) = 0;
+
+  ESDConnectionManager* GetESD() const;
 
  public:
   ESDPlugin();

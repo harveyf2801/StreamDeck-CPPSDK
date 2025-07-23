@@ -36,6 +36,8 @@ class ESDConnectionManager {
 
   // Start the event loop
   void Run();
+  // Stop the event loop
+  bool Stop();
 
   // API to communicate with the Stream Deck application
   void SetTitle(
@@ -52,6 +54,8 @@ class ESDConnectionManager {
   void ShowOKForContext(const std::string& inContext);
   void SetSettings(
     const nlohmann::json& inSettings,
+    const std::string& inContext);
+  void GetSettings(
     const std::string& inContext);
   void GetGlobalSettings();
   void SetGlobalSettings(const nlohmann::json& inSettings);
